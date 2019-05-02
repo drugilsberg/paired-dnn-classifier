@@ -31,7 +31,7 @@ ipython kernel install --user --name=paired-dnn-classifier
 
 ## Generate synthetic data
 
-Run the `generate_syntheric_data.py` adjusting parameters as needed.
+Run the `generate_synthetic_data.py` adjusting parameters as needed.
 
 ## Train the model for word pairs classification
 
