@@ -1,4 +1,4 @@
-# paired-dnn-classifier
+# paired-words-dnn-classifier
 
 Create a DNN classifier for word pairs starting from pretrained word vectors.
 
@@ -35,5 +35,5 @@ Run the `generate_synthetic_data.py` adjusting parameters as needed.
 
 ## Train the model for word pairs classification
 
-Edit and run the `paired_dnn_classifier.py` and play with different architectures and parameters.
-THe script can be easily adapted into a jupyter notebook.
+Edit and run the `paired_words_dnn_classifier.py` and play with different architectures and parameters.
+The script can be easily adapted into a jupyter notebook.
