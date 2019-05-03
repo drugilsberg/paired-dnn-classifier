@@ -10,11 +10,16 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from collections import OrderedDict
 
-
+#%%
 class WordPairsDataset(Dataset):
     """Word pairs dataset."""
 
-    def __init__(self, filepath, vectors_filepath):
+    def __init__(
+        self, filepath, vectors_filepath,
+        device=torch.device(
+            'cuda' if torch.cuda.is_available() else 'cpu'
+        )
+    ):
         """
         Initialize the WordPairsDataset.
 
@@ -22,6 +27,8 @@ class WordPairsDataset(Dataset):
             filepath (string): path to the csv file with the pairs.
             vectors_filepath (string): path to the csv file with the vectors.
                 Used to map the words to indexes.
+            device (torch.device): device where the tensors are stored.
+                Defaults to gpu, if available.
         """
         self.pairs = pd.read_csv(filepath)
         self.word_to_index = {
@@ -30,6 +37,7 @@ class WordPairsDataset(Dataset):
                 pd.read_csv(vectors_filepath, index_col=0).index.tolist()
             )
         }
+        self.device = device
 
     def __len__(self):
         """
@@ -58,11 +66,14 @@ class WordPairsDataset(Dataset):
                 [self.word_to_index[row['first']]],
                 [self.word_to_index[row['second']]]
             ])
+        ).to(device=self.device)
+        label = torch.tensor(
+            [row['label']],
+            dtype=torch.float, device=self.device
         )
-        label = torch.tensor([row['label']], dtype=torch.float)
         return pair, label
 
-
+#%%
 def create_dense_layer(
     input_size, output_size,
     activation_fn=nn.ReLU(), dropout=.5
@@ -106,7 +117,7 @@ def create_embedding_layer(vectors, non_trainable=False):
     return embedding_layer
 
 
-class PairedDNNClassifier(nn.Module):
+class PairedWordsDNNClassifier(nn.Module):
     """
     Binary classification of paired words using pre-trained word vectors.
     """
@@ -125,7 +136,7 @@ class PairedDNNClassifier(nn.Module):
             - dropout (float): dropout rate. Defaults to 0.5.
             - trainable_vectors (bool): trainable vectors. Defaults to True.
         """
-        super(PairedDNNClassifier, self).__init__()
+        super(PairedWordsDNNClassifier, self).__init__()
         # create embedding with the pretrained vectors.
         self.embedding_layer = create_embedding_layer(
             vectors, not trainable_vectors
@@ -158,39 +169,51 @@ class PairedDNNClassifier(nn.Module):
         encoded_pair = self.stacked_dense_layers(embedded_pair)
         return self.output(encoded_pair)
 
-
+#%%
 # setup
 BATCH_SIZE = 128
 EPOCHS = 100
 VECTORS_FILEPATH = os.path.join('data', 'vectors.csv')
 TRAIN_FILEPATH = os.path.join('data', 'train_pairs.csv')
 TEST_FILEPATH = os.path.join('data', 'test_pairs.csv')
+DEVICE = torch.device(
+    'cuda' if torch.cuda.is_available() else 'cpu'
+)
+#%%
 # prepare the datasets
 vectors = pd.read_csv(VECTORS_FILEPATH, index_col=0)
-train_dataset = WordPairsDataset(TRAIN_FILEPATH, VECTORS_FILEPATH)
-test_dataset = WordPairsDataset(TEST_FILEPATH, VECTORS_FILEPATH)
+train_dataset = WordPairsDataset(
+    TRAIN_FILEPATH, VECTORS_FILEPATH, device=DEVICE
+)
+test_dataset = WordPairsDataset(
+    TEST_FILEPATH, VECTORS_FILEPATH, device=DEVICE
+)
 train_dataloader = DataLoader(
     train_dataset, batch_size=BATCH_SIZE, shuffle=True
 )
 test_dataloader = DataLoader(
     test_dataset, batch_size=BATCH_SIZE
 )
+#%%
 # initialize model with default parameters
 # see docstring for customization
-model = PairedDNNClassifier(vectors.values)
+model = PairedWordsDNNClassifier(vectors.values)
+# send the model to the computing device
+# in case a GPU is not available this line is not doin anything
+model.to(DEVICE)
+#%%
 # binary classification so binary cross entropy loss
 criterion = nn.BCELoss()
 # adam with standard parameters
 optimizer = optim.Adam(
     model.parameters(), lr=0.001, betas=(0.9, 0.999)
 )
+#%%
 # train the model
 model.train()
 for epoch in range(EPOCHS):  # loop over the dataset multiple times
     losses = []
-    for i, data in enumerate(train_dataloader, 0):
-        # get the inputs
-        samples, labels = data
+    for samples, labels in train_dataloader:
         # zero the parameter gradients
         optimizer.zero_grad()
         # forward + backward + optimize
@@ -206,12 +229,11 @@ for epoch in range(EPOCHS):  # loop over the dataset multiple times
             sum(losses) / float(len(losses))
         )
     )
+#%%
 # evaluate the model
 model.eval()
 accuracies = []
-for data in test_dataloader:
-        # get the inputs
-        samples, labels = data
+for samples, labels in test_dataloader:
         outputs = model(samples)
         # collect accuracy
         accuracies.append(
@@ -221,6 +243,7 @@ for data in test_dataloader:
             ).astype(int).mean()
         )
 print('accuracy={}'.format(sum(accuracies) / len(accuracies)))
+#%%
 # get the fine-tuned vectors
 finetuned_vectors = pd.DataFrame(
     model.embedding_layer.weight.data.numpy(),
