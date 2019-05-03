@@ -26,7 +26,7 @@ Install `jupiter` playground:
 
 ```sh
 pip install jupyter
-ipython kernel install --user --name=paired-dnn-classifier
+ipython kernel install --user --name=paired-words-dnn-classifier
 ```
 
 ## Generate synthetic data
